@@ -172,4 +172,43 @@ r/lib/systemd/system/nfs-server.service.
    CGroup: /system.slice/nfs-server.service
 Apr 17 17:54:00 nfs systemd[1]: Starting NFS server and services...
 Apr 17 17:54:00 nfs systemd[1]: Started NFS server and services.
+
+
+[araflyayinde@nfs ~]$ sudo chown -R nobody: /mnt/apps
+[araflyayinde@nfs ~]$ sudo chown -R nobody: /mnt/logs
+[araflyayinde@nfs ~]$ sudo chown -R nobody: /mnt/opt
+[araflyayinde@nfs ~]$ ls -l
+total 0
+[araflyayinde@nfs ~]$ ls -l /mnt/apps
+total 0
+[araflyayinde@nfs ~]$ ls -l /mnt
+total 0
+drwxr-xr-x. 2 nobody nobody 6 Apr 17 17:17 apps
+drwxr-xr-x. 2 nobody nobody 6 Apr 17 17:18 logs
+drwxr-xr-x. 2 nobody nobody 6 Apr 17 17:18 opt
+[araflyayinde@nfs ~]$ sudo chmod -R 777 /mnt/apps
+[araflyayinde@nfs ~]$ sudo chmod -R 777 /mnt/logs
+[araflyayinde@nfs ~]$ sudo chmod -R 777 /mnt/opt
+[araflyayinde@nfs ~]$ ls -l /mnt
+total 0
+drwxrwxrwx. 2 nobody nobody 6 Apr 17 17:17 apps
+drwxrwxrwx. 2 nobody nobody 6 Apr 17 17:18 logs
+drwxrwxrwx. 2 nobody nobody 6 Apr 17 17:18 opt
+[araflyayinde@nfs ~]$ sudo systemctl restart nfs-server.service
+[araflyayinde@nfs ~]$ sudo vi /etc/exports
+[araflyayinde@nfs ~]$ cat /etc/exports
+/mnt/apps 10.154.0.0/20(rw,sync,no_all_squash,no_root_squash)
+/mnt/logs 10.154.0.0/20(rw,sync,no_all_squash,no_root_squash)
+/mnt/opt 10.154.0.0/20(rw,sync,no_all_squash,no_root_squash)
+[araflyayinde@nfs ~]$ sudo exportfs -arv
+exporting 10.154.0.0/20:/mnt/opt
+exporting 10.154.0.0/20:/mnt/logs
+exporting 10.154.0.0/20:/mnt/apps
+[araflyayinde@nfs ~]$ sudo systemctl restart nfs-server.service
+[araflyayinde@nfs ~]$ rpcinfo -p | grep nfs
+    100003    3   tcp   2049  nfs
+    100003    4   tcp   2049  nfs
+    100227    3   tcp   2049  nfs_acl
 ```
+
+## Step 2 — Configure the database server
