@@ -18,8 +18,8 @@ In this project we'll implement a solution that consists of following components
 4. Storage Server: Red Hat Enterprise Linux 8 + NFS Server
 5. Programming Language: PHP
 
-*Architectural image
-## Step 1 - Prepare NFS Server
+![](https://github.com/Arafly/DevOps_Tooling_Website_Solution/blob/master/assets/Tooling-Website-Infrastructure.png)
+## Step 1 - Prepare the NFS Server
 1. Spin up a new VM instance with RHEL Linux 8 Operating System.
 2. Configure LVM on the Server (Follow the following steps to carry out the LVM config):
    
@@ -145,7 +145,7 @@ tmpfs                                 374M     0  374M   0% /run/user/1000
 /dev/mapper/vg--filestorage-lv--opt   2.5G   51M  2.5G   2% /mnt/opt
 ```
 
-6. Append these into the /etc/fstab
+6. Ensure that the changes can persist after reboot by appending these into the /etc/fstab
 
 `$ sudo blkid`
 
@@ -253,12 +253,19 @@ Output:
     100227    3   tcp   2049  nfs_acl
 ```
 
+> In order for NFS server to be accessible from your client, you must also open following ports: TCP 111, UDP 111, UDP 2049
 
 
 ## Step 2 — Configure the database server
 
+The following steps are required to to fully set-up our DB server
+
+- Install MySQL server
+Create a database and name it *tooling*
+- Create a database user with name *webaccess* and grant permission to the user on tooling db to be able to do anything only from the webservers subnet cidr
+
 ```
-araflyayinde@db-mysql:~$ sudo mysql
+$ sudo mysql
 Welcome to the MySQL monitor.  Commands end with ; or \g.
 Your MySQL connection id is 10
 Server version: 8.0.23-0ubuntu0.20.04.1 (Ubuntu)
@@ -270,10 +277,7 @@ Type 'help;' or '\h' for help. Type '\c' to clear the current input statement
 .
 mysql> create database tooling;
 Query OK, 1 row affected (0.01 sec)
-mysql> show datasbases;
-ERROR 1064 (42000): You have an error in your SQL syntax; check the manual th
-at corresponds to your MySQL server version for the right syntax to use near 
-'datasbases' at line 1
+
 mysql> show databases;
 +--------------------+
 | Database           |
@@ -285,217 +289,100 @@ mysql> show databases;
 | tooling            |
 +--------------------+
 5 rows in set (0.00 sec)
+
 mysql> CREATE USER 'webaccess'@'%' IDENTIFIED BY 'password';
 Query OK, 0 rows affected (0.01 sec)
 mysql> GRANT ALL PRIVILEGES ON tooling.* TO 'webaccess'@'%';
 Query OK, 0 rows affected (0.01 sec)
 mysql> exit
 Bye
-araflyayinde@db-mysql:~$ sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf
-araflyayinde@db-mysql:~$ sudo systemctl restart mysql
-araflyayinde@db-mysql:~$ 
-```
 
+~$ sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf
+~$ sudo systemctl restart mysql
+```
 ## Step 3 — Prepare the Web Servers
 
+We need to make sure that our Web Servers can serve the same content from shared storage solutions, in our case - NFS Server and MySQL database.  For storing shared files that our Web Servers will use - we will utilize NFS and mount previously created Logical Volume lv-apps to the folder where Apache stores files to be served to the users (/var/www).
+
+The following steps are required to make this possible.
+
+1. Launch a new VMinstance with RHEL 8 Operating System
+2. Install NFS client
+
+`sudo yum install nfs-utils nfs4-acl-tools -y`
+
+3. Mount /var/www/ and target the NFS server’s export for apps
+
 ```
-Installed:
-  apr-1.6.3-11.el8.x86_64                                                    
-  apr-util-1.6.1-6.el8.x86_64                                                
-  apr-util-bdb-1.6.1-6.el8.x86_64                                            
-  apr-util-openssl-1.6.1-6.el8.x86_64                                        
-  centos-logos-httpd-80.5-2.el8.noarch                                       
-  httpd-2.4.37-30.module_el8.3.0+561+97fdbbcc.x86_64                         
-  httpd-filesystem-2.4.37-30.module_el8.3.0+561+97fdbbcc.noarch              
-  httpd-tools-2.4.37-30.module_el8.3.0+561+97fdbbcc.x86_64                   
-  mailcap-2.1.48-3.el8.noarch                                                
-  mod_http2-1.15.7-2.module_el8.3.0+477+498bb568.x86_64                      
-Complete!
-[araflyayinde@webserv-1 ~]$ sudo systemctl start httpd
-[araflyayinde@webserv-1 ~]$ sudo systemctl enable httpd
+sudo mkdir /var/www
+sudo mount -t nfs -o rw,nosuid <NFS-Server-Private-IP-Address>:/mnt/apps /var/www
+```
+
+4. Verify that NFS was mounted successfully by running `df -h`
+Also make sure that the changes will persist on Web Server after reboo, by adding following line:
+
+`sudo vi /etc/fstab`
+
+`<NFS-Server-Private-IP-Address>:/mnt/apps /var/www nfs defaults 0 0`
+
+5. Install Apache
+
+```
+$ sudo yum install httpd -y
+
+$ sudo systemctl start httpd
+$ sudo systemctl enable httpd
 Created symlink /etc/systemd/system/multi-user.target.wants/httpd.service → /
 usr/lib/systemd/system/httpd.service.
-[araflyayinde@webserv-1 ~]$ ls -l /var/www
-total 0
-drwxr-xr-x. 2 root root 6 Nov  4 03:23 cgi-bin
-drwxr-xr-x. 2 root root 6 Nov  4 03:23 html
-
-
-
-[araflyayinde@webserv-1 ~]$ sudo ls -l /var/log/httpd
-total 4
--rw-r--r--. 1 root root   0 Apr 19 21:26 access_log
--rw-r--r--. 1 root root 855 Apr 19 21:26 error_log
-[araflyayinde@webserv-1 ~]$ sudo mv /var/log/httpd /var/log/httpdyke
-[araflyayinde@webserv-1 ~]$ sudo ls -l /var/log/
-total 844
-drwx------. 2 root   root       23 Apr 17 14:48 audit
--rw-------. 1 root   root    10078 Apr 19 21:10 boot.log
--rw-------. 1 root   root    10771 Apr 18 03:23 boot.log-20210418
--rw-rw----. 1 root   utmp   135936 Apr 18 20:14 btmp
-drwxr-xr-x. 2 chrony chrony      6 Nov 19  2019 chrony
--rw-------. 1 root   root     4934 Apr 19 21:10 cron
--rw-------. 1 root   root     5274 Apr 18 03:01 cron-20210418
--rw-------. 1 root   root    18822 Apr 19 21:25 dnf.librepo.log
--rw-r--r--. 1 root   root    22539 Apr 18 03:08 dnf.librepo.log-20210418
--rw-r--r--. 1 root   root    87753 Apr 19 21:25 dnf.log
--rw-r--r--. 1 root   root     6130 Apr 19 21:25 dnf.rpm.log
--rw-r-----. 1 root   root      372 Apr 19 21:10 firewalld
--rw-------. 1 root   root      714 Apr 19 21:25 hawkey.log
--rw-r--r--. 1 root   root      612 Apr 18 03:08 hawkey.log-20210418
-drwx------. 2 root   root       41 Apr 19 21:26 httpdyke
--rw-rw-r--. 1 root   utmp   292292 Apr 19 21:25 lastlog
--rw-------. 1 root   root        0 Apr 18 03:23 maillog
--rw-------. 1 root   root        0 Mar 15 19:19 maillog-20210418
--rw-------. 1 root   root   209877 Apr 19 21:32 messages
--rw-------. 1 root   root   185098 Apr 18 03:18 messages-20210418
-drwx------. 2 root   root        6 Mar 15 19:18 private
-drwxr-xr-x. 2 root   root        6 Mar  3 17:12 qemu-ga
--rw-------. 1 root   root    25370 Apr 19 21:37 secure
--rw-------. 1 root   root    69542 Apr 18 03:03 secure-20210418
--rw-------. 1 root   root        0 Apr 18 03:23 spooler
-
-Remember to change the user and group of /var/log/httpd from nobody to root chmod 700
-[araflyayinde@webserv-1 ~]$ sudo ls -l /var/log/httpd
-total 20
--rw-r--r--. 1 root root 12075 Apr 24 16:30 access_log
--rw-r--r--. 1 root root  4321 Apr 24 13:56 error_log
-[araflyayinde@webserv-1 ~]$ systemctlrestart httpd
--bash: systemctlrestart: command not found
-[araflyayinde@webserv-1 ~]$ sudo systemctl restart httpd
-
-[araflyayinde@webserv-1 ~]$ git clone https://github.com/darey-io/tooling.git
-Cloning into 'tooling'...
-remote: Enumerating objects: 239, done.
-remote: Total 239 (delta 0), reused 0 (delta 0), pack-reused 239
-Receiving objects: 100% (239/239), 282.38 KiB | 5.13 MiB/s, done.
-Resolving deltas: 100% (135/135), done.
-[araflyayinde@webserv-1 ~]$ ls -l
-total 0
-drwxrwxr-x. 4 araflyayinde araflyayinde 191 Apr 19 21:49 tooling
 ```
 
-## snag
-```
-[araflyayinde@webserv-1 ~]$ unmount -t nfs rw,nosuid 10.154.0.6:/mnt/logs
- /var/log/httpd
--bash: unmount: command not found
-[araflyayinde@webserv-1 ~]$ df -h
-Filesystem            Size  Used Avail Use% Mounted on
-devtmpfs              1.9G     0  1.9G   0% /dev
-tmpfs                 1.9G     0  1.9G   0% /dev/shm
-tmpfs                 1.9G   17M  1.9G   1% /run
-tmpfs                 1.9G     0  1.9G   0% /sys/fs/cgroup
-/dev/sda2              20G  2.6G   18G  14% /
-/dev/sda1             200M  6.9M  193M   4% /boot/efi
-10.154.0.6:/mnt/apps  3.5G   58M  3.5G   2% /var/www
-10.154.0.6:/mnt/logs  3.5G   57M  3.5G   2% /var/log/httpd
-tmpfs                 374M     0  374M   0% /run/user/1000
+> Repeat steps 1-5 for the other two Web Servers.
 
-[araflyayinde@webserv-1 ~]$ sudo umount -t nfs rw,nosuid 10.154.0.6:/mnt/
-logs /var/log/httpd
-umount: rw,nosuid: no mount point specified.
-umount: /var/log/httpd: not mounted.
-[araflyayinde@webserv-1 ~]$ df -h
-Filesystem            Size  Used Avail Use% Mounted on
-devtmpfs              1.9G     0  1.9G   0% /dev
-tmpfs                 1.9G     0  1.9G   0% /dev/shm
-tmpfs                 1.9G   17M  1.9G   1% /run
-tmpfs                 1.9G     0  1.9G   0% /sys/fs/cgroup
-/dev/sda2              20G  2.6G   18G  14% /
-/dev/sda1             200M  6.9M  193M   4% /boot/efi
-10.154.0.6:/mnt/apps  3.5G   58M  3.5G   2% /var/www
-tmpfs                 374M     0  374M   0% /run/user/1000
-[araflyayinde@webserv-1 ~]$ ls -l /var/www/html
-total 40
--rw-r--r--. 1 root root 2909 Apr 19 21:57 admin_tooling.php
--rw-r--r--. 1 root root 1531 Apr 19 21:57 create_user.php
--rw-r--r--. 1 root root 4385 Apr 19 21:57 functions.php
-drwxr-xr-x. 2 root root  183 Apr 19 21:57 img
--rw-r--r--. 1 root root 3162 Apr 19 21:57 index.php
--rw-r--r--. 1 root root  780 Apr 19 21:57 login.php
--rw-r--r--. 1 root root   19 Apr 19 21:57 README.md
--rw-r--r--. 1 root root 1097 Apr 19 21:57 register.php
+> Verify that Apache files and directories are available on the Web Server in /var/www and also on the NFS server in /mnt/apps. If you see the same files - it means NFS is mounted correctly. 
+
+6. Locate the log folder for Apache on the Web Server and mount it to NFS server’s export for logs.
+   
+ > Before mounting, try to backup the log file, as mounting would replace everything in there and that could be catastrophic
+
+`$ sudo mv /var/log/httpd /var/log/httpdyke`
+
+> **Gotcha!** Remember to change the user and group of /var/log/httpd from nobody to root chmod 700 (This was changed to nobody by the NFS, remember it's already in sync with the Web server?). If not you'll run into a bit of snag where apache isn't starting up
+
+`$ sudo mount -t -o nfs rw,nosuid 10.154.0.6:/mnt/logs`
+
+7. Fork the tooling source code from Darey.io Github Account to your Github account.
+
+`$ git clone https://github.com/darey-io/tooling.git`
+
+
+8. Deploy the tooling website’s code to the Webserver. Ensure that the html folder from the repository is deployed to /var/www/html
 
 ```
+$ cd /var/www/html
+$ ls
 
-Back in the nfs
-```
-[araflyayinde@nfs ~]$ ls -l /mnt/logs
-total 8
--rw-r--r--. 1 root root 1485 Apr 19 21:55 access_log
--rw-r--r--. 1 root root 1133 Apr 19 21:55 error_log
-[araflyayinde@nfs ~]$ sudo rm -rf /mnt/logs/access_log && sudo rm -rf /mnt/
-logs/error_log 
-[araflyayinde@nfs ~]$ ls -l /mnt/logs
-total 0
-
-```
-
-## Webserver
-
-```
-[araflyayinde@webserv-1 ~]$ cd /var/www/html
-[araflyayinde@webserv-1 html]$ ls
 admin_tooling.php  img        README.md     tooling_stylesheets.css
 create_user.php    index.php  register.php
 functions.php      login.php  style.css
-[araflyayinde@webserv-1 html]$ sudo vi functions.php 
 ```
 
-## Mistake in tooling-db.sql
-```
+9. Update the website’s configuration to connect to the database (in functions.php file), then apply the tooling-db.sql script.
 
---
--- Dumping data for table `users`
---
-INSERT INTO `users` (`id`, `username`, `password`, `email`, `user_type`, `s
-tatus`) VALUES
-(1, 'admin', '21232f297a57a5a743894a0e4a801fc3', 'dare@dare.com', 'admin', 
-'1')
-
-
-[araflyayinde@webserv-1 tooling]$ mysql -h 34.82.54.113 -u webaccess -p to
+`$ mysql -h 34.82.54.113 -u webaccess -p to
 oling < tooling-db.sql
-Enter password: 
-ERROR 1064 (42000) at line 43: You have an error in your SQL syntax; check
- the manual that corresponds to your MySQL server version for the right sy
-ntax to use near 'ALTER TABLE `users`
-  ADD PRIMARY KEY (`id`)' at line 11
+Enter password: `
 
+10.  Disable SELinux -  open following config file `sudo vi /etc/sysconfig/selinux `  and set `SELINUX=disabled.`
 
-
-[araflyayinde@webserv-1 tooling]$ sudo vi tooling-db.sql 
-[araflyayinde@webserv-1 tooling]$ mysql -h 34.82.54.113 -u webaccess -p too
-ling < tooling-db.sql
-Enter password: 
-ERROR 1050 (42S01) at line 30: Table 'users' already exists
-[araflyayinde@webserv-1 tooling]$ mysql -h 34.82.54.113 -u webaccess -p too
-ling < tooling-db.sql
-Enter password: 
-[araflyayinde@webserv-1 tooling]$ ls
-apache-config.conf  html         README.md     tooling-db.sql
-Dockerfile          Jenkinsfile  start-apache
-[araflyayinde@webserv-1 tooling]$ sudo setsebool -P httpd_can_network_conne
-ct 1
-[araflyayinde@webserv-1 tooling]$ sudo setsebool -P http_use_nfs 1
-Boolean http_use_nfs is not defined
-[araflyayinde@webserv-1 tooling]$ sudo setsebool -P httpd_use_nfs 1
-[araflyayinde@webserv-1 tooling]$ sudo setsebool -P httpd_can_network_conne
-ct_db 1
-[araflyayinde@webserv-1 tooling]$ cd ..
-[araflyayinde@webserv-1 ~]$ ls -l /var/www/html/
-total 40
--rw-r--r--. 1 root root 2909 Apr 19 21:57 admin_tooling.php
--rw-r--r--. 1 root root 1531 Apr 19 21:57 create_user.php
--rw-r--r--. 1 root root 4373 Apr 23 04:38 functions.php
-drwxr-xr-x. 2 root root  183 Apr 19 21:57 img
--rw-r--r--. 1 root root 3162 Apr 19 21:57 index.php
--rw-r--r--. 1 root root  780 Apr 19 21:57 login.php
--rw-r--r--. 1 root root   19 Apr 19 21:57 README.md
--rw-r--r--. 1 root root 1097 Apr 19 21:57 register.php
--rw-r--r--. 1 root root 1704 Apr 19 21:57 style.css
--rw-r--r--. 1 root root 1027 Apr 19 21:57 tooling_stylesheets.css
-[araflyayinde@webserv-1 ~]$ cat /var/www/html/index.php
+and run the following commands
 
 ```
+$ sudo setsebool -P httpd_can_network_connect 1
+$ sudo setsebool -P httpd_use_nfs 1
+$ sudo setsebool -P httpd_can_network_connect_db 1
+
+```
+
+11. Open the website in your browser http://<Web-Server-Public-IP-Address-or-Public-DNS-Name>/index.php and make sure you can login into the website with admin admin.
+
+![](https://github.com/Arafly/DevOps_Tooling_Website_Solution/blob/master/assets/phplogin.PNG)
