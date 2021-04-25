@@ -386,3 +386,5 @@ $ sudo setsebool -P httpd_can_network_connect_db 1
 11. Open the website in your browser http://<Web-Server-Public-IP-Address-or-Public-DNS-Name>/index.php and make sure you can login into the website with admin admin.
 
 ![](https://github.com/Arafly/DevOps_Tooling_Website_Solution/blob/master/assets/phplogin.PNG)
+
+![](https://github.com/Arafly/DevOps_Tooling_Website_Solution/blob/master/assets/dashboard.png)
